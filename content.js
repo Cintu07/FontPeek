@@ -1,37 +1,198 @@
-// FontPeek v2.0 - Enhanced Font Detector
-// Features: Copy functionality, detailed font properties
+// FontPeek v3.0 - Enhanced Font Detector
+// NEW: History tracking, Quick actions, Google Fonts detection, Dark mode
 
 let tooltip = null;
 let timeout = null;
 let copyFeedback = null;
+let currentFontInfo = null;
+let isDarkMode = false;
 
-// Create tooltip element
+const hasChrome = typeof chrome !== 'undefined';
+const hasStorage = hasChrome && chrome.storage;
+const hasStorageSync = hasStorage && chrome.storage.sync;
+const hasStorageLocal = hasStorage && chrome.storage.local;
+const hasStorageChangeApi = hasStorage && chrome.storage.onChanged && typeof chrome.storage.onChanged.addListener === 'function';
+const hasRuntime = hasChrome && chrome.runtime && typeof chrome.runtime.onMessage?.addListener === 'function';
+
+function handleExtensionError(err) {
+  if (!err) return;
+  const message = typeof err === 'string' ? err : err.message || err.toString();
+  if (!message) {
+    return;
+  }
+  if (message.includes('message port closed before a response was received')) {
+    return;
+  }
+  if (typeof console !== 'undefined' && console.warn) {
+    console.warn('FontPeek:', message);
+  }
+}
+
+function safeStorageSyncGet(keys, callback) {
+  if (!hasStorageSync) {
+    callback({});
+    return;
+  }
+  try {
+    chrome.storage.sync.get(keys, (result) => {
+      const lastErr = hasChrome && chrome.runtime ? chrome.runtime.lastError : null;
+      if (lastErr) {
+        handleExtensionError(lastErr);
+        callback({});
+        return;
+      }
+      callback(result || {});
+    });
+  } catch (err) {
+    handleExtensionError(err);
+    callback({});
+  }
+}
+
+function safeStorageLocalGet(keys, callback) {
+  if (!hasStorageLocal) {
+    callback({});
+    return;
+  }
+  try {
+    chrome.storage.local.get(keys, (result) => {
+      const lastErr = hasChrome && chrome.runtime ? chrome.runtime.lastError : null;
+      if (lastErr) {
+        handleExtensionError(lastErr);
+        callback({});
+        return;
+      }
+      callback(result || {});
+    });
+  } catch (err) {
+    handleExtensionError(err);
+    callback({});
+  }
+}
+
+function safeStorageLocalSet(data, onComplete) {
+  if (!hasStorageLocal) {
+    if (onComplete) onComplete(false);
+    return;
+  }
+  try {
+    chrome.storage.local.set(data, () => {
+      const lastErr = hasChrome && chrome.runtime ? chrome.runtime.lastError : null;
+      if (lastErr) {
+        handleExtensionError(lastErr);
+        if (onComplete) onComplete(false);
+        return;
+      }
+      if (onComplete) onComplete(true);
+    });
+  } catch (err) {
+    handleExtensionError(err);
+    if (onComplete) onComplete(false);
+  }
+}
+
+function safeRuntimeSendMessage(message, callback) {
+  if (!hasRuntime) {
+    if (callback) callback(undefined);
+    return;
+  }
+  try {
+    chrome.runtime.sendMessage(message, (response) => {
+      const lastErr = chrome.runtime && chrome.runtime.lastError;
+      if (lastErr) {
+        handleExtensionError(lastErr);
+        if (callback) callback(undefined);
+        return;
+      }
+      if (callback) callback(response);
+    });
+  } catch (err) {
+    handleExtensionError(err);
+    if (callback) callback(undefined);
+  }
+}
+
+// Google Fonts list (top popular ones)
+const GOOGLE_FONTS = [
+  'Roboto', 'Open Sans', 'Lato', 'Montserrat', 'Oswald', 'Source Sans Pro',
+  'Raleway', 'PT Sans', 'Merriweather', 'Ubuntu', 'Playfair Display',
+  'Poppins', 'Noto Sans', 'Mukta', 'Rubik', 'Work Sans', 'Inter',
+  'Nunito', 'Crimson Text', 'Libre Baskerville'
+];
+
+// Initialize settings - FIXED VERSION
+(function loadDarkModeSetting() {
+  if (!hasStorageSync) {
+    isDarkMode = false;
+    return;
+  }
+  safeStorageSyncGet(['darkMode'], (result) => {
+    isDarkMode = result && typeof result.darkMode === 'boolean' ? result.darkMode : false;
+  });
+})();
+
+if (hasStorageChangeApi) {
+  try {
+    chrome.storage.onChanged.addListener((changes) => {
+      if (changes.darkMode) {
+        isDarkMode = changes.darkMode.newValue;
+        if (tooltip) {
+          updateTooltipTheme();
+        }
+      }
+    });
+  } catch (err) {
+    handleExtensionError(err);
+  }
+}
+
+// Create tooltip
 function createTooltip() {
   if (tooltip) return tooltip;
   
   tooltip = document.createElement('div');
   tooltip.id = 'fontpeek-tooltip';
+  tooltip.classList.add(isDarkMode ? 'fp-dark' : 'fp-light');
   document.body.appendChild(tooltip);
-  
-  // Add click event for copying
-  tooltip.addEventListener('click', handleTooltipClick);
   
   return tooltip;
 }
 
-// Create copy feedback element
+// Update theme
+function updateTooltipTheme() {
+  if (!tooltip) return;
+  tooltip.classList.remove('fp-dark', 'fp-light');
+  tooltip.classList.add(isDarkMode ? 'fp-dark' : 'fp-light');
+}
+
+// Create copy feedback
 function createCopyFeedback() {
   if (copyFeedback) return copyFeedback;
   
   copyFeedback = document.createElement('div');
   copyFeedback.id = 'fontpeek-copy-feedback';
-  copyFeedback.textContent = '✓ Copied!';
   document.body.appendChild(copyFeedback);
   
   return copyFeedback;
 }
 
-// Get comprehensive font info
+// Check if Google Font
+function isGoogleFont(fontName) {
+  return GOOGLE_FONTS.some(gFont => 
+    fontName.toLowerCase().includes(gFont.toLowerCase())
+  );
+}
+
+// Get Google Fonts URL
+function getGoogleFontsUrl(fontName) {
+  if (!fontName || typeof fontName !== 'string') {
+    return null;
+  }
+  const cleanName = fontName.split(',')[0].trim();
+  return `https://fonts.google.com/specimen/${cleanName.replace(/\s+/g, '+')}`;
+}
+
+// Get font info
 function getFontInfo() {
   const selection = window.getSelection();
   
@@ -42,77 +203,123 @@ function getFontInfo() {
   const range = selection.getRangeAt(0);
   let element = range.commonAncestorContainer;
   
-  // If text node, get parent element
   if (element.nodeType === 3) {
     element = element.parentElement;
   }
   
   const style = window.getComputedStyle(element);
   
-  // Get font family and parse it
   const fontFamily = style.fontFamily.replace(/['"]/g, '');
   const fonts = fontFamily.split(',').map(f => f.trim());
+  const primaryFont = fonts[0];
   
-  // Get color and convert to hex
   const rgbColor = style.color;
   const hexColor = rgbToHex(rgbColor);
   
+  const isGoogle = isGoogleFont(primaryFont);
+  
   return {
-    // Font family
-    primary: fonts[0],
+    primary: primaryFont,
     fallback: fonts.slice(1).join(', '),
     fullFamily: fontFamily,
     
-    // Font properties
     size: style.fontSize,
     weight: style.fontWeight,
     style: style.fontStyle,
-    variant: style.fontVariant,
     
-    // Text properties
     lineHeight: style.lineHeight,
     letterSpacing: style.letterSpacing,
     wordSpacing: style.wordSpacing,
-    textTransform: style.textTransform,
-    textDecoration: style.textDecoration,
     
-    // Color
     color: hexColor,
     colorRgb: rgbColor,
     
-    // Background (if any)
-    backgroundColor: style.backgroundColor,
+    textTransform: style.textTransform,
+    textDecoration: style.textDecoration,
     
-    // Rendering
-    textRendering: style.textRendering,
-    fontSmoothing: style.webkitFontSmoothing || 'default'
+    isGoogleFont: isGoogle,
+  googleFontsUrl: isGoogle ? getGoogleFontsUrl(primaryFont) : null,
+    
+    timestamp: Date.now(),
+    url: window.location.hostname
   };
 }
 
-// Convert RGB to Hex
 function rgbToHex(rgb) {
-  const match = rgb.match(/\d+/g);
-  if (!match) return rgb;
+  // Handle rgba values
+  const match = rgb.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*[\d.]+)?\)/);
   
-  const r = parseInt(match[0]).toString(16).padStart(2, '0');
-  const g = parseInt(match[1]).toString(16).padStart(2, '0');
-  const b = parseInt(match[2]).toString(16).padStart(2, '0');
+  if (!match) {
+    // If already hex or other format, return as is
+    if (rgb.startsWith('#')) return rgb.toUpperCase();
+    return rgb;
+  }
   
-  return `#${r}${g}${b}`.toUpperCase();
+  const r = parseInt(match[1]);
+  const g = parseInt(match[2]);
+  const b = parseInt(match[3]);
+  
+  // Convert to hex with proper padding
+  const toHex = (num) => {
+    const hex = num.toString(16);
+    return hex.length === 1 ? '0' + hex : hex;
+  };
+  
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`.toUpperCase();
+}
+
+// Generate CSS
+function generateCSS(fontInfo) {
+  let css = `font-family: ${fontInfo.fullFamily};\n`;
+  css += `font-size: ${fontInfo.size};\n`;
+  css += `font-weight: ${fontInfo.weight};\n`;
+  css += `font-style: ${fontInfo.style};\n`;
+  css += `line-height: ${fontInfo.lineHeight};\n`;
+  css += `letter-spacing: ${fontInfo.letterSpacing};\n`;
+  css += `color: ${fontInfo.color};`;
+  
+  if (fontInfo.textTransform !== 'none') {
+    css += `\ntext-transform: ${fontInfo.textTransform};`;
+  }
+  
+  return css;
+}
+
+// Save to history
+function saveToHistory(fontInfo) {
+  if (!hasStorageLocal) {
+    return;
+  }
+  safeStorageLocalGet(['fontHistory'], (result) => {
+    let history = result.fontHistory || [];
+    
+    const isDuplicate = history.some(item => 
+      item.primary === fontInfo.primary && 
+      item.url === fontInfo.url &&
+      Date.now() - item.timestamp < 60000
+    );
+    
+    if (!isDuplicate) {
+      history.unshift(fontInfo);
+      history = history.slice(0, 50);
+      safeStorageLocalSet({ fontHistory: history });
+    }
+  });
 }
 
 // Copy to clipboard
-function copyToClipboard(text) {
+function copyToClipboard(text, message = '✓ Copied!') {
   navigator.clipboard.writeText(text).then(() => {
-    showCopyFeedback();
+    showCopyFeedback(message);
   }).catch(err => {
     console.error('Failed to copy:', err);
   });
 }
 
 // Show copy feedback
-function showCopyFeedback() {
+function showCopyFeedback(message = '✓ Copied!') {
   const feedback = createCopyFeedback();
+  feedback.textContent = message;
   feedback.classList.add('show');
   
   setTimeout(() => {
@@ -120,45 +327,210 @@ function showCopyFeedback() {
   }, 1500);
 }
 
-// Handle clicks on tooltip items
+let repositionScheduled = false;
+
+function getSelectionRect() {
+  const selection = window.getSelection();
+  if (!selection || !selection.rangeCount) {
+    return null;
+  }
+  const rect = selection.getRangeAt(0).getBoundingClientRect();
+  if (!rect || (rect.width === 0 && rect.height === 0)) {
+    return null;
+  }
+  return rect;
+}
+
+function applyTooltipPosition(rect) {
+  if (!tooltip || !rect) {
+    return;
+  }
+
+  const padding = 12;
+  const scrollX = window.scrollX;
+  const scrollY = window.scrollY;
+  const viewportWidth = document.documentElement.clientWidth;
+  const viewportHeight = document.documentElement.clientHeight;
+
+  const tooltipWidth = tooltip.offsetWidth;
+  const tooltipHeight = tooltip.offsetHeight;
+
+  let left = rect.left + scrollX + (rect.width / 2) - (tooltipWidth / 2);
+  left = Math.max(scrollX + padding, Math.min(left, scrollX + viewportWidth - tooltipWidth - padding));
+
+  const topAbove = rect.top + scrollY - tooltipHeight - padding;
+  const topBelow = rect.bottom + scrollY + padding;
+  const canShowAbove = topAbove >= scrollY + padding;
+  const canShowBelow = topBelow + tooltipHeight <= scrollY + viewportHeight - padding;
+
+  let top;
+  let useBelow = false;
+
+  if (canShowAbove) {
+    top = topAbove;
+  } else if (canShowBelow) {
+    top = topBelow;
+    useBelow = true;
+  } else {
+    const minTop = scrollY + padding;
+    const maxTop = scrollY + viewportHeight - tooltipHeight - padding;
+    const centeredTop = rect.top + scrollY + (rect.height / 2) - (tooltipHeight / 2);
+    top = Math.min(Math.max(centeredTop, minTop), maxTop);
+  }
+
+  const minTop = scrollY + padding;
+  const maxTop = scrollY + viewportHeight - tooltipHeight - padding;
+  if (top < minTop) {
+    top = minTop;
+  }
+  if (top > maxTop) {
+    top = maxTop;
+  }
+
+  tooltip.style.left = `${left}px`;
+  tooltip.style.top = `${top}px`;
+  tooltip.classList.toggle('below', useBelow);
+}
+
+function scheduleTooltipReposition() {
+  if (!tooltip || tooltip.style.display === 'none' || isClosing) {
+    return;
+  }
+  if (repositionScheduled) {
+    return;
+  }
+  repositionScheduled = true;
+  requestAnimationFrame(() => {
+    repositionScheduled = false;
+    const rect = getSelectionRect();
+    if (rect) {
+      applyTooltipPosition(rect);
+    }
+  });
+}
+
+if (hasRuntime) {
+  chrome.runtime.onMessage.addListener((message) => {
+    if (!message) {
+      return;
+    }
+    if (message.type === 'FONTPEEK_SET_DARK_MODE') {
+      isDarkMode = !!message.value;
+      updateTooltipTheme();
+    }
+  });
+}
+
+// Handle tooltip clicks - FIXED VERSION!
 function handleTooltipClick(e) {
-  e.stopPropagation(); // IMPORTANT: Prevents event bubbling
+  e.stopPropagation();
+  e.preventDefault(); // ADD THIS!
   
+  // Handle close button - IMPROVED
+  const closeBtn = e.target.closest('.fp-close-btn');
+  if (closeBtn) {
+    hideTooltip();
+    // Clear selection to prevent re-triggering
+    window.getSelection().removeAllRanges();
+    return;
+  }
+  
+  
+  // Handle copyable items
   const copyable = e.target.closest('.fp-copyable');
-  if (!copyable) return;
+  if (copyable) {
+    const value = copyable.getAttribute('data-value');
+    if (value) {
+      copyToClipboard(value);
+      
+      copyable.classList.add('copied');
+      setTimeout(() => {
+        copyable.classList.remove('copied');
+      }, 300);
+    }
+    return;
+  }
   
-  const value = copyable.getAttribute('data-value');
-  if (value) {
-    copyToClipboard(value);
+  // Handle quick actions
+  const action = e.target.closest('[data-action]');
+  if (action && currentFontInfo) {
+    const actionType = action.getAttribute('data-action');
     
-    // Visual feedback on the clicked item
-    copyable.classList.add('copied');
-    setTimeout(() => {
-      copyable.classList.remove('copied');
-    }, 300);
-    
-    // DON'T close tooltip after copying
+    switch(actionType) {
+      case 'copy-font':
+        copyToClipboard(currentFontInfo.primary, '✓ Font name copied!');
+        break;
+      case 'copy-css':
+        copyToClipboard(generateCSS(currentFontInfo), '✓ CSS copied!');
+        break;
+      case 'copy-color':
+        copyToClipboard(currentFontInfo.color, '✓ Color copied!');
+        break;
+      case 'google-fonts':
+        if (currentFontInfo.googleFontsUrl) {
+          window.open(currentFontInfo.googleFontsUrl, '_blank');
+        }
+        break;
+    }
+    return;
   }
 }
 
-// Show tooltip with all font info
+// Show tooltip
 function showTooltip(fontInfo) {
   const selection = window.getSelection();
   if (!selection.rangeCount) return;
   
+  currentFontInfo = fontInfo;
+  saveToHistory(fontInfo);
+  
   const range = selection.getRangeAt(0);
   const rect = range.getBoundingClientRect();
+  if (!rect || (rect.width === 0 && rect.height === 0)) {
+    hideTooltip();
+    return;
+  }
   
   const tip = createTooltip();
+  updateTooltipTheme();
   
-  // Build comprehensive HTML
+  // Build HTML
   let html = `
     <div class="fp-header">
-      <div class="fp-title">FontPeek</div>
-      <div class="fp-subtitle">Click any property to copy • ESC to close</div>
-      <button class="fp-close-btn" onclick="document.getElementById('fontpeek-tooltip').style.display='none'">✕</button>
+      <div class="fp-title-row">
+        <div class="fp-title">FontPeek v3.0</div>
+        <button class="fp-close-btn">✕</button>
+      </div>
     </div>
- 
+    
+    <div class="fp-quick-actions">
+      <button class="fp-action-btn" data-action="copy-font" title="Copy font name">
+        <span class="fp-btn-icon">📝</span>
+        <span class="fp-btn-text">Font</span>
+      </button>
+      <button class="fp-action-btn" data-action="copy-css" title="Copy CSS">
+        <span class="fp-btn-icon">💻</span>
+        <span class="fp-btn-text">CSS</span>
+      </button>
+      <button class="fp-action-btn" data-action="copy-color" title="Copy color">
+        <span class="fp-btn-icon">🎨</span>
+        <span class="fp-btn-text">Color</span>
+      </button>
+  `;
+  
+  if (fontInfo.isGoogleFont) {
+    html += `
+      <button class="fp-action-btn fp-google-btn" data-action="google-fonts" title="View on Google Fonts">
+        <span class="fp-btn-icon">G</span>
+        <span class="fp-btn-text">Google</span>
+      </button>
+    `;
+  }
+  
+  html += `</div>`;
+  
+  // Font Family
+  html += `
     <div class="fp-section">
       <div class="fp-section-title">FONT FAMILY</div>
       <div class="fp-copyable fp-main-font" data-value="${fontInfo.primary}">
@@ -166,6 +538,10 @@ function showTooltip(fontInfo) {
         <span class="fp-copy-icon">📋</span>
       </div>
   `;
+  
+  if (fontInfo.isGoogleFont) {
+    html += `<div class="fp-badge fp-google-badge">Google Fonts</div>`;
+  }
   
   if (fontInfo.fallback) {
     html += `
@@ -179,7 +555,7 @@ function showTooltip(fontInfo) {
   
   html += `</div>`;
   
-  // Font Properties Section
+  // Properties
   html += `
     <div class="fp-section">
       <div class="fp-section-title">PROPERTIES</div>
@@ -204,7 +580,7 @@ function showTooltip(fontInfo) {
     </div>
   `;
   
-  // Spacing Section
+  // Spacing
   html += `
     <div class="fp-section">
       <div class="fp-section-title">SPACING</div>
@@ -221,7 +597,7 @@ function showTooltip(fontInfo) {
     </div>
   `;
   
-  // Color Section
+  // Color
   html += `
     <div class="fp-section">
       <div class="fp-section-title">COLOR</div>
@@ -236,109 +612,57 @@ function showTooltip(fontInfo) {
     </div>
   `;
   
-  // Advanced Section (collapsible)
-  if (fontInfo.textTransform !== 'none' || fontInfo.textDecoration !== 'none solid rgb(0, 0, 0)') {
-    html += `
-      <div class="fp-section fp-advanced">
-        <div class="fp-section-title">ADVANCED</div>
-        <div class="fp-grid">
-    `;
-    
-    if (fontInfo.textTransform !== 'none') {
-      html += `
-        <div class="fp-copyable fp-property" data-value="${fontInfo.textTransform}">
-          <span class="fp-prop-label">Transform</span>
-          <span class="fp-prop-value">${fontInfo.textTransform}</span>
-        </div>
-      `;
-    }
-    
-    if (fontInfo.textDecoration !== 'none solid rgb(0, 0, 0)') {
-      html += `
-        <div class="fp-copyable fp-property" data-value="${fontInfo.textDecoration}">
-          <span class="fp-prop-label">Decoration</span>
-          <span class="fp-prop-value">${fontInfo.textDecoration.split(' ')[0]}</span>
-        </div>
-      `;
-    }
-    
-    html += `
-        </div>
-      </div>
-    `;
-  }
-  
   tip.innerHTML = html;
   
-  // Position tooltip
-  const x = rect.left + (rect.width / 2) + window.scrollX;
-  const y = rect.top + window.scrollY - 15;
+  // Add click listener - IMPORTANT!
+  tip.removeEventListener('click', handleTooltipClick);
+  tip.addEventListener('click', handleTooltipClick);
   
-  tip.style.left = x + 'px';
-  tip.style.top = y + 'px';
+  repositionScheduled = false;
+  tip.classList.remove('below');
+  tip.classList.remove('is-visible');
+  tip.style.visibility = 'hidden';
   tip.style.display = 'block';
-  
-  // Keep tooltip in viewport
-  // Keep tooltip in viewport with better positioning
-  setTimeout(() => {
-    const tipRect = tip.getBoundingClientRect();
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-    
-    // Horizontal positioning - center on selection
-    let finalX = x;
-    if (tipRect.right > viewportWidth - 10) {
-      // Too far right - align to right edge
-      finalX = viewportWidth - tipRect.width/2 - 10 + window.scrollX;
-    }
-    if (tipRect.left < 10) {
-      // Too far left - align to left edge
-      finalX = tipRect.width/2 + 10 + window.scrollX;
-    }
-    tip.style.left = finalX + 'px';
-    
-    // Vertical positioning - always try to show above first
-    if (tipRect.top < 10) {
-      // Not enough space above - show below
-      const belowY = rect.bottom + window.scrollY + 15;
-      tip.style.top = belowY + 'px';
-      tip.classList.add('below');
-      
-      // Check if it fits below, if not - show at top of viewport
-      const belowRect = tip.getBoundingClientRect();
-      if (belowRect.bottom > viewportHeight - 10) {
-        tip.style.top = (window.scrollY + 10) + 'px';
-        tip.style.transform = 'translateX(-50%)'; // Remove Y transform
-      }
-    } else {
-      tip.classList.remove('below');
-    }
-  }, 10);
-}
-// Update tooltip position on scroll instead of hiding
-let scrollTimeout;
-document.addEventListener('scroll', () => {
-  if (!tooltip || tooltip.style.display === 'none') return;
-  
-  clearTimeout(scrollTimeout);
-  
-  // Optional: Add a semi-transparent overlay while scrolling
-  tooltip.style.opacity = '0.7';
-  
-  scrollTimeout = setTimeout(() => {
-    tooltip.style.opacity = '1';
-  }, 150);
-}, true);
 
-// Hide tooltip
+  requestAnimationFrame(() => {
+    const activeRect = getSelectionRect() || rect;
+    if (!activeRect) {
+      hideTooltip();
+      return;
+    }
+    applyTooltipPosition(activeRect);
+    tip.style.visibility = 'visible';
+    tip.classList.add('is-visible');
+  });
+}
+
+let isClosing = false;
+
+// Modified hideTooltip
 function hideTooltip() {
-  if (tooltip) {
-    tooltip.style.display = 'none';
+  if (tooltip && tooltip.style.display !== 'none') {
+    isClosing = true;
+    tooltip.classList.remove('is-visible');
+    tooltip.style.visibility = 'hidden';
+    tooltip.removeEventListener('click', handleTooltipClick);
+    setTimeout(() => {
+      if (tooltip && !tooltip.classList.contains('is-visible')) {
+        tooltip.style.display = 'none';
+        tooltip.classList.remove('below');
+      }
+      isClosing = false;
+    }, 200);
+  } else {
+    isClosing = false;
   }
+  repositionScheduled = false;
+  currentFontInfo = null;
 }
 
-// Handle selection
+// Modified handleSelection
 function handleSelection() {
+  if (isClosing) return; // Don't process if we just closed
+  
   clearTimeout(timeout);
   
   timeout = setTimeout(() => {
@@ -352,9 +676,9 @@ function handleSelection() {
   }, 100);
 }
 
-// Initialize
 document.addEventListener('mouseup', handleSelection);
 document.addEventListener('keyup', handleSelection);
+
 document.addEventListener('mousedown', (e) => {
   // Don't hide if clicking inside tooltip
   if (tooltip && tooltip.contains(e.target)) {
@@ -364,27 +688,29 @@ document.addEventListener('mousedown', (e) => {
   // Don't hide if clicking on selected text
   const selection = window.getSelection();
   if (selection && selection.toString().trim() !== '') {
+    // But hide if clicking on already selected text (to allow deselection)
+    const range = selection.getRangeAt(0);
+    const rect = range.getBoundingClientRect();
+    if (!rect || rect.width === 0) {
+      hideTooltip();
+    }
     return;
   }
   
-  // Only hide if clicking outside
   hideTooltip();
 });
 
-// Add close button functionality (optional but recommended)
+// Keyboard shortcuts
 document.addEventListener('keydown', (e) => {
-  // Press Escape to close tooltip
   if (e.key === 'Escape') {
     hideTooltip();
   }
-});
-
-
-
-// Keyboard shortcut: Ctrl+Shift+F to toggle
-document.addEventListener('keydown', (e) => {
+  
   if (e.ctrlKey && e.shiftKey && e.key === 'F') {
     e.preventDefault();
     handleSelection();
   }
 });
+
+document.addEventListener('scroll', scheduleTooltipReposition, true);
+window.addEventListener('resize', scheduleTooltipReposition);

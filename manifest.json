@@ -1,12 +1,24 @@
 {
   "manifest_version": 3,
   "name": "FontPeek",
-  "version": "2.0.0",
-  "description": "Instantly detect, view, and copy font information from any selected text.",
+  "version": "3.0.0",
+  "description": "Instantly detect, view, copy, and track font information from any selected text.",
   "permissions": [
     "activeTab",
+    "storage",
     "clipboardWrite"
   ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
