@@ -1,242 +1,154 @@
-# FontPeek — Instantly Detect Fonts on Any Website ✨
+# 🎨 FontPeek — Instantly Detect Fonts on Any Website (V3.0)
 
-**FontPeek** is a lightweight Chrome extension that lets you instantly identify the font used in any selected text on a webpage. Just highlight the text, and a neat tooltip pops up showing the font name — no extra clicks, no clutter.
+FontPeek is a lightweight Chrome extension that reveals the font behind any selected text — now powered by a fully upgraded tooltip engine, a redesigned popup, dark mode, history tracking, and smarter internals.
 
----
-
-## ✨ Features
-
-- 🎯 **Instant Font Detection** - Select any text to see its font family
-- 📊 **Detailed Information** - View font weight, size, and fallback fonts
-- 🎨 **Beautiful UI** - Modern gradient tooltip with smooth animations
-- ⚡ **Lightning Fast** - Optimized performance with minimal overhead
-- 🌐 **Universal Compatibility** - Works on every website
-- 🔒 **Privacy First** - No data collection, everything runs locally
-- 💪 **Custom Web Fonts** - Detects both system fonts and custom web fonts
+V3 is the biggest glow-up yet. Faster. Cleaner. Actually useful.
 
 ---
 
-## 🚀 Installation
+## 🚀 What’s New in V3.0
 
-### From Chrome Web Store (Recommended)
+### ⚡ Completely Upgraded Tooltip
+- Quick-action buttons:
+  - 📝 Copy font  
+  - 💻 Copy full CSS  
+  - 🎨 Copy color  
+  - 🅶 Open Google Fonts  
+- Google Fonts detection + badge  
+- Richer property breakdown  
+- Polished visuals + smoother animations  
+- Smarter positioning (stays visible even in tight spaces)  
+- Tooltip stays open while copying  
+- Doesn’t disappear on scroll  
 
-1. Visit the Chrome Web Store (Coming Soon)
-2. Click "Add to Chrome"
-3. Start selecting text to see fonts!
+---
 
-### Manual Installation (Developer Mode)
+## 🌙 Full Dark Mode Support
+- Toggle inside popup  
+- Saves preference via sync storage  
+- Tooltip theme updates instantly  
+- UI adapts automatically  
 
-1. Download or clone this repository:
+---
 
-git clone https://github.com/Cintu07/FontPeek.git
+## 🕘 Font History Tracking
+- Stores recently inspected fonts (deduped)  
+- Listed in the popup  
+- One-click copy  
+- “Clear History” button  
+- Synced through the service worker  
 
+---
 
-2. Open Chrome and navigate to `chrome://extensions/`
-3. Enable **Developer mode** (toggle in top-right corner)
-4. Click **Load unpacked**
-5. Select the `fontpeek` folder
-6. Done! The extension is now active 🎉
+## 🎛 Popup Redesign (New UI)
+- Gradient, modern visual style  
+- Tabs: **Settings** + **History**  
+- Version badge  
+- Clean footer links  
+- Fully responsive layout  
+- Smoother interactions  
+
+---
+
+## 🛠 Background Service Worker (New)
+- Runs install-time initialization  
+- Manages history + theme storage  
+- Cleans old data  
+- Handles events like `clearHistory`  
+- Keeps popup lightweight and fast  
+
+---
+
+## 🧩 Manifest + Asset Upgrades
+- Proper MV3 service worker registration  
+- New popup HTML/CSS/JS architecture  
+- Updated permissions  
+- Improved tooltip stylesheet  
+- Cleaner folder structure  
 
 ---
 
 ## 🎮 How to Use
 
-1. Visit any website (e.g., Google, Twitter, Medium)
-2. Select/highlight any text with your mouse
-3. See the magic! A tooltip appears showing:
-- Primary font name
-- Fallback fonts
-- Font weight
-- Font size
-4. Click anywhere to dismiss the tooltip
+### ⚡ Tooltip (Select Any Text)
+- Select any text  
+- Tooltip appears with:  
+  - Font name  
+  - Color  
+  - CSS details  
+  - Quick-action buttons  
 
-That's it! No configuration needed.
+### 🎛 Popup (Click Extension Icon)
+- Toggle dark mode  
+- View font history  
+- One-click copy  
+- Clear history  
 
----
-
-## 🛠️ Technical Details
-
-### Built With
-
-- **Manifest V3** - Latest Chrome extension standard
-- **Vanilla JavaScript** - No dependencies, pure performance
-- **CSS3 Animations** - Smooth, modern UI effects
-- **Web APIs** - `window.getSelection()`, `getComputedStyle()`
-
-### File Structure
-
-fontpeek/
-├── manifest.json # Extension configuration
-├── content.js # Main logic & font detection
-├── content.css # Tooltip styling
-├── icons/ # Extension icons
-│ ├── icon16.png
-│ ├── icon48.png
-│ └── icon128.png
-└── README.md # Documentation
-
-
-### Permissions
-
-- **activeTab** - Required to detect text selection on active tabs
-- No other permissions needed!
+### ⌨️ Shortcuts
+- `Ctrl + Shift + F` — Force refresh tooltip  
+- `ESC` — Close tooltip  
 
 ---
 
-## 💻 Development
+## 📥 Manual Installation
+(Chrome Web Store version coming later)
 
-### Prerequisites
+1. Download this repository  
+2. Go to `chrome://extensions/`  
+3. Enable **Developer Mode**  
+4. Click **Load Unpacked**  
+5. Select the project folder  
 
-- Google Chrome (version 88 or higher)
-- Basic knowledge of JavaScript and Chrome Extensions
-
-### Local Setup
-
-Clone the repository
-git clone https://github.com/Cintu07/FontPeek.git
-
-Navigate to directory
-cd fontpeek
-
-Load in Chrome (see Installation section above)
-
-
-### Making Changes
-
-1. Edit the files in your favorite code editor
-2. Go to `chrome://extensions/`
-3. Click the refresh icon on the FontPeek extension card
-4. Reload the webpage to test changes
-
-### Code Structure
-
-**content.js** - Main functionality:
-- `getFontInfo()` - Extracts font information from selected text
-- `showTooltip()` - Displays the tooltip with font data
-- `handleSelection()` - Manages selection events with debouncing
-
-**content.css** - Styling:
-- Gradient background with purple theme
-- Responsive tooltip positioning
-- Smooth fade-in animations
+Done. 🎉
 
 ---
 
-## 🎨 Customization
+## 🤝 Contribute
 
-### Change Tooltip Colors
-
-Edit `content.css`:
-
-#font-detector-tooltip {
-background: linear-gradient(135deg, #YOUR_COLOR_1 0%, #YOUR_COLOR_2 100%);
-}
-
-
-Try these color combos:
-- 🔴 Red/Pink: `#ff6b6b`, `#ee5a6f`
-- 🔵 Blue/Teal: `#4ecdc4`, `#44a08d`
-- 🟢 Green/Lime: `#56ab2f`, `#a8e063`
-- 🟡 Orange/Yellow: `#f2994a`, `#f2c94c`
-
-### Adjust Tooltip Size
-
-In `content.css`, modify:
-
-.fd-name {
-font-size: 16px; /* Change font size */
-}
-
+PRs are welcome.  
+If you wanna improve performance, UI, or detection — jump in.
 
 ---
 
-## 🤝 Contributing
-
-Contributions are welcome! Here's how you can help:
-
-1. Fork the repository
-2. Create a new branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-### Ideas for Contribution
-
-- [ ] Add keyboard shortcut support
-- [ ] Copy font name to clipboard
-- [ ] Font history/favorites feature
-- [ ] Dark mode option
-- [ ] Multiple language support
-- [ ] Export font list from a page
+## 🐛 Issues
+Found a bug? Open an issue with:
+- Chrome version  
+- OS  
+- Website tested  
+- Steps to reproduce  
+- Screenshot  
 
 ---
 
-## 🐛 Bug Reports & Issues
+## 📜 Project History (Short & Clean)
 
-Found a bug? Please open an issue on [GitHub Issues](https://github.com/Cintu07/FontPeek/issues).
+### **V1 (2025-10-24)**
+- Basic font detector  
+- Gradient tooltip  
+- Font family, weight, size, fallbacks  
+- Vanilla JS + simple UI  
 
-When reporting bugs, include:
-- Chrome version
-- Operating system
-- Website where the issue occurred
-- Steps to reproduce
-- Screenshot (if applicable)
+### **V2**
+- Minor UI polish  
+- Smoother animations  
+- Better stability  
 
----
-
-## 📝 Changelog
-
-### Version 1.0.0 (2025-10-24)
-
-- 🎉 Initial release
-- ✨ Font detection for selected text
-- 🎨 Beautiful gradient tooltip
-- 📊 Display font family, weight, size, and fallbacks
-- ⚡ Optimized performance with debouncing
-- 🌐 Universal website compatibility
-
----
-
-## 🌟 Acknowledgments
-
-- Inspired by the need for quick font identification while browsing
-- Built with ❤️ for the design and developer community
-- Thanks to all contributors and users!
+### **V3 (Current Version)**  
+Massive rebuild with:
+- Quick-actions  
+- Dark mode  
+- History  
+- Popup redesign  
+- Service worker  
+- Upgraded manifest  
+- Smarter tooltip behavior  
 
 ---
 
-## 📬 Contact
-
-- **GitHub**: [@Cintu07](https://github.com/Cintu07)
-- **Email**: pawankalyan1892@gmail.com
-- **Twitter**: @pawankalyandev
+## ⭐ Show Support
+If FontPeek helped you, star the repo!  
+It keeps the project alive 💜
 
 ---
 
-## 🎯 Roadmap
-
-- [ ] Firefox extension version
-- [ ] Edge extension version
-- [ ] Font comparison feature
-- [ ] Export functionality
-- [ ] Font pairing suggestions
-- [ ] Integration with Google Fonts
-- [ ] Advanced filtering options
-
----
-
-## 📜 License
-
-This project is licensed under the **MIT License** — free to use and modify.
-
----
-
-<div align="center">
-
-⭐ **Star this repo if you find it helpful!**
-
-Made with 💜 by **Pawan Kalyan (aka Cintu)**
-
-[Report Bug](https://github.com/Cintu07/FontPeek/issues) · [Request Feature](https://github.com/Cintu07/FontPeek/issues) · [Documentation](https://github.com/Cintu07/FontPeek)
-
-</div>
+Made with ❤️ by **Pawan Kalyan (Cintu)**  
